@@ -45,6 +45,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Listen to Firebase Auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      // Always go back into loading while we fetch the Firestore doc.
+      // Without this, a second sign-in (e.g. Google popup) leaves loading=false
+      // while userDoc is momentarily null → "Access denied" flash on LoginPage.
+      setLoading(true)
       setFirebaseUser(fbUser)
 
       if (fbUser) {

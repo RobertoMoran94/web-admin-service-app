@@ -17,7 +17,19 @@ export default function CalendarPage() {
   const [month, setMonth] = useState(today.getMonth())   // 0-indexed
   const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate())
 
-  const { upcomingBookings } = useMockMetrics()
+  const { upcomingBookings: initial } = useMockMetrics()
+  const [bookings,       setBookings]       = useState(initial)
+  const [cancelTarget,   setCancelTarget]   = useState<string | null>(null)
+  const [cancelledToast, setCancelledToast] = useState(false)
+
+  const confirmCancel = (id: string) => {
+    setBookings((prev) =>
+      prev.map((b) => b.id === id ? { ...b, status: 'cancelled' as const } : b)
+    )
+    setCancelTarget(null)
+    setCancelledToast(true)
+    setTimeout(() => setCancelledToast(false), 3000)
+  }
 
   // Calendar grid
   const firstDow   = new Date(year, month, 1).getDay()
@@ -30,11 +42,25 @@ export default function CalendarPage() {
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
 
   const dayBookings = selectedDay
-    ? upcomingBookings.filter((b) => b.date === 'Today' || b.date === 'Tomorrow')
+    ? bookings.filter((b) => b.date === 'Today' || b.date === 'Tomorrow')
     : []
+
+  const STATUS_STYLES: Record<string, string> = {
+    confirmed: 'bg-green-100 text-green-700',
+    pending:   'bg-yellow-100 text-yellow-700',
+    cancelled: 'bg-red-100 text-red-500',
+  }
 
   return (
     <div className="space-y-6">
+
+      {/* Cancelled toast */}
+      {cancelledToast && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-gray-900 text-white text-sm rounded-xl shadow-lg">
+          Booking cancelled.
+        </div>
+      )}
+
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
         <p className="text-sm text-gray-500 mt-0.5">Appointment overview</p>
@@ -111,10 +137,23 @@ export default function CalendarPage() {
               {dayBookings.map((b) => (
                 <div key={b.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className="w-1 h-12 rounded-full bg-brand-500 shrink-0 mt-0.5" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-gray-900">{b.time} — {b.customerName}</p>
                     <p className="text-xs text-gray-500">{b.service} · {b.employee}</p>
-                    <p className="text-xs font-semibold text-gray-700 mt-1">${b.price}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs font-semibold text-gray-700">${b.price}</p>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status]}`}>
+                        {b.status}
+                      </span>
+                    </div>
+                    {b.status !== 'cancelled' && (
+                      <button
+                        onClick={() => setCancelTarget(b.id)}
+                        className="mt-2 text-xs text-red-500 hover:text-red-700 font-medium transition-colors"
+                      >
+                        Cancel booking
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -126,6 +165,35 @@ export default function CalendarPage() {
           )}
         </div>
       </div>
+
+      {/* Cancel confirmation modal */}
+      {cancelTarget && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+            </div>
+            <p className="font-semibold text-gray-900 mb-1">Cancel this booking?</p>
+            <p className="text-sm text-gray-500 mb-6">The customer will be notified of the cancellation.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCancelTarget(null)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+              >
+                Keep booking
+              </button>
+              <button
+                onClick={() => confirmCancel(cancelTarget)}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+              >
+                Yes, cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

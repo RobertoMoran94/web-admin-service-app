@@ -9,6 +9,7 @@ import ServicesPage            from './pages/ServicesPage'
 import TeamPage                from './pages/TeamPage'
 import BusinessProfilePage     from './pages/BusinessProfilePage'
 import UsersPage               from './pages/UsersPage'
+import BusinessPage            from './pages/BusinessPage'
 
 function DashboardRoutes() {
   return (
@@ -19,8 +20,9 @@ function DashboardRoutes() {
         <Route path="services" element={<ServicesPage />} />
         <Route path="team"     element={<TeamPage />} />
         <Route path="profile"  element={<BusinessProfilePage />} />
+        <Route path="business" element={<BusinessPage />} />
         <Route path="users"    element={<UsersPage />} />
-        <Route path="*"        element={<Navigate to="overview" replace />} />
+        <Route path="*"        element={<Navigate to="/overview" replace />} />
       </Routes>
     </Layout>
   )

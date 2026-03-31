@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useBusinessContext } from '../hooks/useBusinessContext'
 import { useServices } from '../hooks/useServices'
+import ImageUpload from '../components/ImageUpload'
 import type { Service } from '../types'
 
 const EMPTY_FORM = {
@@ -135,21 +136,24 @@ export default function ServicesPage() {
               </button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              {[
-                { label: 'Name',        key: 'name',        type: 'text',   placeholder: 'Premium Haircut' },
-                { label: 'Image URL',   key: 'imageUrl',    type: 'text',   placeholder: 'https://...' },
-              ].map(({ label, key, type, placeholder }) => (
-                <div key={key}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                  <input
-                    type={type}
-                    value={(form as Record<string, unknown>)[key] as string}
-                    onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                    placeholder={placeholder}
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-                  />
-                </div>
-              ))}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Premium Haircut"
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <ImageUpload
+                label="Service photo"
+                value={form.imageUrl}
+                onChange={(url) => setForm((f) => ({ ...f, imageUrl: url }))}
+                storagePath={`businesses/${business?.id ?? 'unknown'}/services`}
+                shape="rect"
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea

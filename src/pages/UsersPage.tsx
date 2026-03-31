@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+
+const PAGE_SIZE = 20
 import UserTable from '../components/UserTable'
 import { useUsers } from '../hooks/useUsers'
 import { UserRole, type UserRoleValue } from '../types'
@@ -16,8 +18,13 @@ export default function UsersPage() {
   const { users, loading, error, updateRole, refresh } = useUsers()
   const [filter, setFilter] = useState<FilterValue>('all')
   const [search, setSearch] = useState('')
+  const [page,   setPage]   = useState(1)
 
-  const visible = useMemo(() => {
+  // Reset to page 1 when filter/search changes
+  const handleFilter = useCallback((v: FilterValue) => { setFilter(v); setPage(1) }, [])
+  const handleSearch = useCallback((v: string)      => { setSearch(v); setPage(1) }, [])
+
+  const filtered = useMemo(() => {
     let list = filter === 'all' ? users : users.filter((u) => u.role === filter)
     if (search.trim()) {
       const q = search.toLowerCase()
@@ -27,6 +34,9 @@ export default function UsersPage() {
     }
     return list
   }, [users, filter, search])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const visible    = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <div className="space-y-6">
@@ -70,7 +80,7 @@ export default function UsersPage() {
           </svg>
           <input
             type="text" placeholder="Search by name or email…" value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
@@ -78,7 +88,7 @@ export default function UsersPage() {
           {FILTERS.map(({ label, value }) => (
             <button
               key={value}
-              onClick={() => setFilter(value)}
+              onClick={() => handleFilter(value)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 filter === value ? 'bg-brand-500 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
               }`}
@@ -107,8 +117,55 @@ export default function UsersPage() {
         <UserTable users={visible} onRoleChange={updateRole} />
       )}
 
-      {!loading && visible.length > 0 && (
-        <p className="text-xs text-gray-400 text-right">Showing {visible.length} of {users.length} users</p>
+      {/* Pagination */}
+      {!loading && filtered.length > PAGE_SIZE && (
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-gray-400">
+            Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length} users
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+              .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                if (idx > 0 && (p as number) - (arr[idx - 1] as number) > 1) acc.push('…')
+                acc.push(p)
+                return acc
+              }, [])
+              .map((p, i) =>
+                p === '…' ? (
+                  <span key={`ellipsis-${i}`} className="px-2 text-xs text-gray-400">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p as number)}
+                    className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+                      page === p ? 'bg-brand-500 text-white' : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

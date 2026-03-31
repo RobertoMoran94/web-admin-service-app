@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useBusinessContext } from '../hooks/useBusinessContext'
 import { useEmployees } from '../hooks/useEmployees'
+import ImageUpload from '../components/ImageUpload'
 import type { Employee } from '../types'
 
 const EMPTY_FORM = { name: '', role: '', avatarUrl: '', isActive: true }
@@ -100,9 +101,8 @@ export default function TeamPage() {
             </div>
             <div className="px-6 py-4 space-y-4">
               {[
-                { label: 'Full name',   key: 'name',      placeholder: 'Mike Johnson' },
-                { label: 'Role / title',key: 'role',      placeholder: 'Senior Stylist' },
-                { label: 'Avatar URL',  key: 'avatarUrl', placeholder: 'https://...' },
+                { label: 'Full name',    key: 'name', placeholder: 'Mike Johnson'    },
+                { label: 'Role / title', key: 'role', placeholder: 'Senior Stylist'  },
               ].map(({ label, key, placeholder }) => (
                 <div key={key}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
@@ -115,6 +115,14 @@ export default function TeamPage() {
                   />
                 </div>
               ))}
+
+              <ImageUpload
+                label="Profile photo"
+                value={form.avatarUrl}
+                onChange={(url) => setForm((f) => ({ ...f, avatarUrl: url }))}
+                storagePath={`businesses/${business?.id ?? 'unknown'}/employees`}
+                shape="circle"
+              />
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.isActive} onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 accent-brand-500" />
                 <span className="text-sm text-gray-700">Active (available for bookings)</span>

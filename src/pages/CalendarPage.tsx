@@ -11,6 +11,24 @@ const MOCK_DAY_COUNTS: Record<number, number> = {
   19:5, 21:1, 22:4, 23:3, 24:2, 26:4, 28:3, 29:5, 30:2,
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  confirmed: 'bg-green-100 text-green-700',
+  pending:   'bg-yellow-100 text-yellow-700',
+  cancelled: 'bg-red-100 text-red-500',
+}
+
+// ---------------------------------------------------------------------------
+// Spinner — reused in the modal and any future loading states
+// ---------------------------------------------------------------------------
+function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  )
+}
+
 export default function CalendarPage() {
   const today   = new Date()
   const [year,  setYear]  = useState(today.getFullYear())
@@ -20,19 +38,43 @@ export default function CalendarPage() {
   const { upcomingBookings: initial } = useMockMetrics()
   const [bookings,       setBookings]       = useState(initial)
   const [cancelTarget,   setCancelTarget]   = useState<string | null>(null)
-  const [cancelledToast, setCancelledToast] = useState(false)
+  const [cancelling,     setCancelling]     = useState(false)
+  const [toast,          setToast]          = useState<{ msg: string; ok: boolean } | null>(null)
 
-  const confirmCancel = (id: string) => {
-    setBookings((prev) =>
-      prev.map((b) => b.id === id ? { ...b, status: 'cancelled' as const } : b)
-    )
-    setCancelTarget(null)
-    setCancelledToast(true)
-    setTimeout(() => setCancelledToast(false), 3000)
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok })
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  /**
+   * confirmCancel — async so we can await the real BE call.
+   *
+   * Right now it simulates a network round-trip (500 ms).
+   * When the Spring Boot endpoint is ready, replace the
+   * `await new Promise(...)` line with:
+   *   await api.cancelBooking(id)   // DELETE /api/v1/bookings/{id}
+   */
+  const confirmCancel = async (id: string) => {
+    setCancelling(true)
+    try {
+      // TODO: replace with real API call once BE is deployed
+      // await bookingApi.cancel(id)
+      await new Promise<void>((resolve) => setTimeout(resolve, 700))
+
+      setBookings((prev) =>
+        prev.map((b) => b.id === id ? { ...b, status: 'cancelled' as const } : b)
+      )
+      setCancelTarget(null)
+      showToast('Booking cancelled successfully.')
+    } catch {
+      showToast('Failed to cancel booking — please try again.', false)
+    } finally {
+      setCancelling(false)
+    }
   }
 
   // Calendar grid
-  const firstDow   = new Date(year, month, 1).getDay()
+  const firstDow    = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells       = Array.from({ length: firstDow + daysInMonth }, (_, i) =>
     i < firstDow ? null : i - firstDow + 1
@@ -45,19 +87,22 @@ export default function CalendarPage() {
     ? bookings.filter((b) => b.date === 'Today' || b.date === 'Tomorrow')
     : []
 
-  const STATUS_STYLES: Record<string, string> = {
-    confirmed: 'bg-green-100 text-green-700',
-    pending:   'bg-yellow-100 text-yellow-700',
-    cancelled: 'bg-red-100 text-red-500',
-  }
-
   return (
     <div className="space-y-6">
 
-      {/* Cancelled toast */}
-      {cancelledToast && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-gray-900 text-white text-sm rounded-xl shadow-lg">
-          Booking cancelled.
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 text-white text-sm rounded-xl shadow-lg flex items-center gap-2
+          ${toast.ok ? 'bg-gray-900' : 'bg-red-600'}`}>
+          {toast.ok
+            ? <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            : <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+          }
+          {toast.msg}
         </div>
       )}
 
@@ -96,7 +141,7 @@ export default function CalendarPage() {
           <div className="grid grid-cols-7 gap-1">
             {cells.map((day, i) => {
               if (!day) return <div key={`e-${i}`} />
-              const isToday   = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
+              const isToday    = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
               const isSelected = day === selectedDay
               const count      = MOCK_DAY_COUNTS[day] ?? 0
               return (
@@ -180,15 +225,24 @@ export default function CalendarPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setCancelTarget(null)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+                disabled={cancelling}
+                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
                 Keep booking
               </button>
               <button
                 onClick={() => confirmCancel(cancelTarget)}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 transition-colors"
+                disabled={cancelling}
+                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-xl hover:bg-red-600 disabled:opacity-70 transition-colors flex items-center justify-center gap-2"
               >
-                Yes, cancel
+                {cancelling ? (
+                  <>
+                    <Spinner className="w-4 h-4 text-white" />
+                    Cancelling…
+                  </>
+                ) : (
+                  'Yes, cancel'
+                )}
               </button>
             </div>
           </div>

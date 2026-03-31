@@ -21,7 +21,7 @@ export default function RoleBadge({ role }: Props) {
   const label = ROLE_LABELS[role] ?? role
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${style}`}>
+    <span className={`inline-flex items-center justify-center px-3 py-1 rounded-full text-xs font-medium ${style}`}>
       {label}
     </span>
   )

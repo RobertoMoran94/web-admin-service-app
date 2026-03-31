@@ -120,27 +120,27 @@ export default function OverviewPage() {
         </div>
         <div className="divide-y divide-gray-50">
           {upcomingBookings.map((b) => (
-            <div key={b.id} className="px-5 py-3.5 flex items-center gap-4 hover:bg-gray-50 transition-colors">
+            <div
+              key={b.id}
+              className="px-5 py-3.5 grid grid-cols-[auto_1fr_140px_56px_88px] items-center gap-4 hover:bg-gray-50 transition-colors"
+            >
               {/* Avatar */}
               <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center text-brand-600 font-semibold text-sm shrink-0">
                 {b.customerName.charAt(0)}
               </div>
               {/* Info */}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{b.customerName}</p>
-                <p className="text-xs text-gray-500">{b.service} · {b.employee}</p>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{b.customerName}</p>
+                <p className="text-xs text-gray-500 truncate">{b.service} · {b.employee}</p>
               </div>
-              {/* Date / time */}
-              <div className="text-right shrink-0">
-                <p className="text-sm font-medium text-gray-700">{b.date}</p>
-                <p className="text-xs text-gray-400">{b.time}</p>
-              </div>
+              {/* Date + time — same line */}
+              <p className="text-sm font-medium text-gray-700 text-right">
+                {b.date} <span className="text-gray-400 font-normal">{b.time}</span>
+              </p>
               {/* Price */}
-              <div className="text-right w-14 shrink-0">
-                <p className="text-sm font-semibold text-gray-900">${b.price}</p>
-              </div>
+              <p className="text-sm font-semibold text-gray-900 text-right">${b.price}</p>
               {/* Status */}
-              <span className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${STATUS_STYLES[b.status]}`}>
+              <span className={`inline-flex items-center justify-center text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[b.status]}`}>
                 {b.status.charAt(0).toUpperCase() + b.status.slice(1)}
               </span>
             </div>

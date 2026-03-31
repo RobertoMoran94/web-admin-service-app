@@ -3,15 +3,13 @@ import { UserRole, type UserDoc, type UserRoleValue } from '../types'
 import RoleBadge from './RoleBadge'
 
 interface Props {
-  users:      UserDoc[]
+  users:        UserDoc[]
   onRoleChange: (uid: string, role: UserRoleValue) => Promise<void>
 }
 
-// Roles an admin can assign — not including "admin" itself (safety)
 const ASSIGNABLE_ROLES: { value: UserRoleValue; label: string }[] = [
-  { value: UserRole.CUSTOMER,       label: 'Customer'        },
-  { value: UserRole.PENDING_OWNER,  label: 'Pending Approval' },
-  { value: UserRole.BUSINESS_OWNER, label: 'Business Owner'  },
+  { value: UserRole.CUSTOMER,       label: 'Customer'       },
+  { value: UserRole.BUSINESS_OWNER, label: 'Business Owner' },
 ]
 
 export default function UserTable({ users, onRoleChange }: Props) {
@@ -34,15 +32,12 @@ export default function UserTable({ users, onRoleChange }: Props) {
 
   return (
     <div className="relative">
-
-      {/* Toast notification */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 px-4 py-3 bg-gray-900 text-white text-sm rounded-xl shadow-lg">
           {toastMsg}
         </div>
       )}
 
-      {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
@@ -53,7 +48,6 @@ export default function UserTable({ users, onRoleChange }: Props) {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Change role</th>
             </tr>
           </thead>
-
           <tbody className="divide-y divide-gray-100">
             {users.map((user) => {
               const isLoading = loadingUid === user.id
@@ -61,8 +55,6 @@ export default function UserTable({ users, onRoleChange }: Props) {
 
               return (
                 <tr key={user.id} className="hover:bg-gray-50 transition-colors">
-
-                  {/* User info */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       {user.photoURL ? (
@@ -78,20 +70,12 @@ export default function UserTable({ users, onRoleChange }: Props) {
                       </div>
                     </div>
                   </td>
-
-                  {/* Role badge */}
-                  <td className="px-6 py-4">
-                    <RoleBadge role={user.role} />
-                  </td>
-
-                  {/* Joined date */}
+                  <td className="px-6 py-4"><RoleBadge role={user.role} /></td>
                   <td className="px-6 py-4 text-gray-500 hidden md:table-cell">
                     {user.createdAt
                       ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                       : '—'}
                   </td>
-
-                  {/* Role selector */}
                   <td className="px-6 py-4">
                     {isAdmin ? (
                       <span className="text-xs text-gray-400 italic">Admin — cannot be changed</span>
@@ -101,16 +85,12 @@ export default function UserTable({ users, onRoleChange }: Props) {
                           value={user.role}
                           disabled={isLoading}
                           onChange={(e) => handleRoleChange(user.id, e.target.value as UserRoleValue)}
-                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5
-                                     bg-white text-gray-700
-                                     focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent
-                                     disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-50"
                         >
                           {ASSIGNABLE_ROLES.map((r) => (
                             <option key={r.value} value={r.value}>{r.label}</option>
                           ))}
                         </select>
-
                         {isLoading && (
                           <svg className="animate-spin w-4 h-4 text-brand-500 shrink-0" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>

@@ -1,19 +1,21 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { UserRole } from '../types'
 
 interface Props {
   children: React.ReactNode
 }
 
 /**
- * Wraps a route that requires an admin session.
- * - While auth state is loading → shows a fullscreen spinner
- * - If not signed in → redirects to /login
- * - If signed in but not admin → shows an access denied screen
- * - If signed in and admin → renders children
+ * Allows admin AND business_owner roles.
+ * Guests and plain customers are rejected.
  */
 export default function ProtectedRoute({ children }: Props) {
-  const { firebaseUser, isAdmin, loading } = useAuth()
+  const { firebaseUser, userDoc, loading } = useAuth()
+
+  const hasAccess =
+    userDoc?.role === UserRole.ADMIN ||
+    userDoc?.role === UserRole.BUSINESS_OWNER
 
   if (loading) {
     return (
@@ -26,11 +28,9 @@ export default function ProtectedRoute({ children }: Props) {
     )
   }
 
-  if (!firebaseUser) {
-    return <Navigate to="/login" replace />
-  }
+  if (!firebaseUser) return <Navigate to="/login" replace />
 
-  if (!isAdmin) {
+  if (!hasAccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="text-center max-w-sm">
@@ -41,7 +41,7 @@ export default function ProtectedRoute({ children }: Props) {
           </div>
           <h2 className="text-lg font-semibold text-gray-900">Access denied</h2>
           <p className="mt-2 text-sm text-gray-500">
-            Your account does not have admin privileges. Contact an existing admin to request access.
+            This portal is for business owners and admins only.
           </p>
           <button
             onClick={() => window.location.href = '/login'}

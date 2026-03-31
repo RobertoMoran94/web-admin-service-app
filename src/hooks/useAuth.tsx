@@ -9,26 +9,52 @@ import {
   type User,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db, googleProvider } from '../lib/firebase'
 import { UserRole, type UserDoc } from '../types'
+
+// ── Error helper ──────────────────────────────────────────────────────────────
+
+function toReadableError(err: unknown): string {
+  if (!(err instanceof Error)) return 'An unexpected error occurred.'
+  const code = (err as { code?: string }).code
+  switch (code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Incorrect email or password.'
+    case 'auth/email-already-in-use':
+      return 'This email is already registered.'
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.'
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.'
+    case 'auth/too-many-requests':
+      return 'Too many failed attempts. Please try again later.'
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return ''   // user dismissed — show nothing
+    default:
+      return err.message
+  }
+}
 
 // ── Context shape ─────────────────────────────────────────────────────────────
 
 interface AuthState {
-  /** Firebase Auth user, null while loading or signed out */
-  firebaseUser: User | null
-  /** Firestore user doc — populated after sign-in and admin check */
-  userDoc:      UserDoc | null
-  /** True while we are resolving auth state on mount */
-  loading:      boolean
-  /** True when the signed-in user has role = "admin" */
-  isAdmin:      boolean
-  /** Error message if sign-in or role-fetch failed */
-  error:        string | null
+  firebaseUser:     User | null
+  userDoc:          UserDoc | null
+  loading:          boolean
+  isAdmin:          boolean
+  error:            string | null
   signInWithGoogle: () => Promise<void>
+  signInWithEmail:  (email: string, password: string) => Promise<void>
+  signUpWithEmail:  (email: string, password: string, displayName: string) => Promise<void>
   signOut:          () => Promise<void>
 }
 
@@ -42,12 +68,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
 
-  // Listen to Firebase Auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      // Always go back into loading while we fetch the Firestore doc.
-      // Without this, a second sign-in (e.g. Google popup) leaves loading=false
-      // while userDoc is momentarily null → "Access denied" flash on LoginPage.
+      // Set loading=true immediately so UI never shows a stale "access denied"
+      // while we're mid-fetch of the Firestore user doc.
       setLoading(true)
       setFirebaseUser(fbUser)
 
@@ -57,7 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (snap.exists()) {
             setUserDoc({ id: fbUser.uid, ...snap.data() } as UserDoc)
           } else {
-            // User exists in Auth but not in Firestore — not an admin
             setUserDoc(null)
           }
         } catch (err) {
@@ -70,18 +93,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setLoading(false)
     })
-
     return unsubscribe
   }, [])
+
+  // ── Sign-in methods ──────────────────────────────────────────────────────────
 
   const signInWithGoogle = async () => {
     setError(null)
     try {
       await signInWithPopup(auth, googleProvider)
-      // onAuthStateChanged above will handle fetching the Firestore doc
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sign-in failed'
-      setError(message)
+      // onAuthStateChanged handles the rest
+    } catch (err) {
+      const msg = toReadableError(err)
+      if (msg) setError(msg)
+    }
+  }
+
+  const signInWithEmail = async (email: string, password: string) => {
+    setError(null)
+    try {
+      await signInWithEmailAndPassword(auth, email, password)
+    } catch (err) {
+      const msg = toReadableError(err)
+      setError(msg || 'Sign-in failed.')
+      throw err
+    }
+  }
+
+  /**
+   * Creates a Firebase Auth user + Firestore doc with role = business_owner.
+   * Since this is the Business Portal, anyone self-registering is a business owner.
+   * Admin accounts must be set manually in Firestore.
+   */
+  const signUpWithEmail = async (email: string, password: string, displayName: string) => {
+    setError(null)
+    try {
+      const { user } = await createUserWithEmailAndPassword(auth, email, password)
+      await updateProfile(user, { displayName })
+      await setDoc(doc(db, 'users', user.uid), {
+        email:       user.email ?? email,
+        displayName,
+        role:        UserRole.BUSINESS_OWNER,
+        createdAt:   serverTimestamp(),
+      })
+      // onAuthStateChanged fires, fetches the new doc, and loading goes false
+    } catch (err) {
+      const msg = toReadableError(err)
+      setError(msg || 'Sign-up failed.')
+      throw err
     }
   }
 
@@ -94,7 +153,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ firebaseUser, userDoc, loading, isAdmin, error, signInWithGoogle, signOut }}
+      value={{
+        firebaseUser, userDoc, loading, isAdmin, error,
+        signInWithGoogle, signInWithEmail, signUpWithEmail, signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

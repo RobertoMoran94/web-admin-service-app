@@ -55,27 +55,29 @@ export interface CategoryDto {
 // TODO (Phase 12): replace useMockMetrics with a call to this endpoint.
 
 export interface DailyRevenueDto {
-  date:    string   // "Apr 1"  (formatted by BE, locale-aware)
-  revenue: number   // USD cents or whole dollars — agree with BE team
+  date:       string   // "Apr 1" — formatted by BE
+  revenue:    string   // pre-formatted "$320.00" — render as-is
+  revenueRaw: number   // numeric value for chart Y-axis scaling
 }
 
 export interface ServiceStatDto {
-  serviceId: string
-  name:      string
-  bookings:  number
-  revenue:   number
+  serviceId:  string
+  name:       string
+  bookings:   number
+  revenue:    string   // pre-formatted "$850.00" — render as-is
+  revenueRaw: number   // numeric value for bar chart height
 }
 
 export interface AnalyticsOverviewDto {
-  totalRevenue:      number
-  totalBookings:     number
-  newCustomers:      number
-  avgBookingValue:   number
-  revenueVsLastMonth: number   // percentage, e.g. 12.4 means +12.4%
-  bookingsVsLastMonth: number
-  customersVsLastMonth: number
-  revenueByDay:      DailyRevenueDto[]
-  topServices:       ServiceStatDto[]
+  totalRevenue:             string   // pre-formatted e.g. "$3,072.00"
+  totalBookings:            number
+  newCustomers:             number
+  avgBookingValue:          string   // pre-formatted e.g. "$64.00"
+  revenueVsLastPeriod:      number   // percentage, positive = growth
+  bookingsVsLastPeriod:     number
+  newCustomersVsLastPeriod: number
+  revenueByDay:             DailyRevenueDto[]
+  topServices:              ServiceStatDto[]
 }
 // Response: ApiResponse<AnalyticsOverviewDto>
 
@@ -86,32 +88,31 @@ export interface AnalyticsOverviewDto {
 
 export type BookingStatus = 'confirmed' | 'pending' | 'cancelled' | 'completed' | 'no_show'
 
-export interface BookingDto {
-  id:           string
-  businessId:   string
-  customerId:   string
-  customerName: string
-  customerEmail: string
-  serviceId:    string
-  serviceName:  string
-  employeeId:   string
-  employeeName: string
-  date:         string   // ISO 8601: "2026-04-15"
-  startTime:    string   // "10:30"
-  endTime:      string   // "11:00"
-  price:        number
-  status:       BookingStatus
-  notes?:       string
-  createdAt:    string   // ISO 8601 datetime
-  updatedAt:    string
+// GET /api/v1/owner/bookings?businessId=&from=&to=&status=&page=&size=
+export interface OwnerBookingItemDto {
+  id:              string
+  clientUid:       string
+  customerName:    string
+  serviceIds:      string[]
+  serviceNames:    string[]
+  stylistId:       string | null
+  stylistName:     string | null
+  appointmentDate: string   // "YYYY-MM-DD"
+  appointmentTime: string   // "HH:MM"
+  status:          'upcoming' | 'completed' | 'cancelled'
+  total:           string   // pre-formatted "$25.00"
 }
-// Response: ApiResponse<PagedResponse<BookingDto>>
 
-// PATCH /api/v1/bookings/{id}/cancel
-export interface CancelBookingRequest {
-  reason?: string   // optional cancellation reason shown to customer
+export interface OwnerBookingsPageDto {
+  items:      OwnerBookingItemDto[]
+  totalItems: number
+  page:       number
+  pageSize:   number
+  totalPages: number
 }
-export interface CancelBookingResponse {
+
+// PATCH /api/v1/owner/bookings/{id}/cancel
+export interface CancelBookingResponseDto {
   id:     string
   status: 'cancelled'
 }

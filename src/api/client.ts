@@ -3,11 +3,14 @@
  * ==================================
  * Thin wrapper around fetch that:
  *  1. Injects the Firebase ID token as Bearer in every request
- *  2. Unwraps the ApiResponse<T> envelope
- *  3. Throws a readable error on non-2xx or success=false
+ *  2. Converts snake_case JSON keys → camelCase (BE uses Jackson SNAKE_CASE globally)
+ *  3. Throws a readable error on non-2xx responses
  *
- * TODO (Phase 12): Replace BASE_URL with the deployed Cloud Run URL.
- *   Set VITE_API_BASE_URL in .env.production once Cloud Run is up.
+ * The Spring Boot backend returns DTOs directly (ResponseEntity.ok(dto)) —
+ * there is no ApiResponse<T> envelope wrapper.
+ *
+ * Set VITE_API_BASE_URL in .env.local (local) or Firebase Hosting env (prod).
+ * Defaults to localhost:8080 for local development.
  *
  * Usage:
  *   const data = await apiGet<AnalyticsOverviewDto>(
@@ -16,13 +19,30 @@
  */
 
 import { auth } from '../lib/firebase'
-import type { ApiResponse } from './contract'
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1'
+
+// ---------------------------------------------------------------------------
+// snake_case → camelCase deep transformer
+// ---------------------------------------------------------------------------
+
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+}
+
+function deepCamel(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(deepCamel)
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).map(([k, v]) => [toCamel(k), deepCamel(v)])
+    )
+  }
+  return obj
+}
 
 // ---------------------------------------------------------------------------
 // Token helper
@@ -53,17 +73,12 @@ async function request<T>(
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers })
 
   if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`API ${res.status}: ${text}`)
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.message ?? `HTTP ${res.status}: ${res.statusText}`)
   }
 
-  const envelope: ApiResponse<T> = await res.json()
-
-  if (!envelope.success) {
-    throw new Error(envelope.error ?? 'Unknown API error')
-  }
-
-  return envelope.data
+  const json = await res.json()
+  return deepCamel(json) as T
 }
 
 // ---------------------------------------------------------------------------

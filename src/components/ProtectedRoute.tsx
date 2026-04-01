@@ -9,13 +9,13 @@ interface Props {
 /**
  * Allows admin AND business_owner roles.
  * Guests and plain customers are rejected.
+ *
+ * Note: in VITE_MOCK_AUTH=true dev mode, useAuth injects a real-looking
+ * firebaseUser + userDoc into state, so this component needs no special
+ * handling — it just works as in production.
  */
 export default function ProtectedRoute({ children }: Props) {
   const { firebaseUser, userDoc, loading } = useAuth()
-
-  const hasAccess =
-    userDoc?.role === UserRole.ADMIN ||
-    userDoc?.role === UserRole.BUSINESS_OWNER
 
   if (loading) {
     return (
@@ -28,17 +28,23 @@ export default function ProtectedRoute({ children }: Props) {
     )
   }
 
-  // In dev mock mode firebaseUser is null but userDoc is set — still allow through
-  const isMock = import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true'
-  if (!firebaseUser && !isMock) return <Navigate to="/login" replace />
+  // Not authenticated at all → send to login
+  if (!firebaseUser) return <Navigate to="/login" replace />
+
+  // Authenticated but wrong role → show access denied
+  const hasAccess =
+    userDoc?.role === UserRole.ADMIN ||
+    userDoc?.role === UserRole.BUSINESS_OWNER
 
   if (!hasAccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="text-center max-w-sm">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-100 mb-4">
-            <svg className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <svg className="w-7 h-7 text-red-600" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
             </svg>
           </div>
           <h2 className="text-lg font-semibold text-gray-900">Access denied</h2>
@@ -47,7 +53,8 @@ export default function ProtectedRoute({ children }: Props) {
           </p>
           <button
             onClick={() => window.location.href = '/login'}
-            className="mt-6 px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-xl hover:bg-brand-600 transition-colors"
+            className="mt-6 px-4 py-2 bg-brand-500 text-white text-sm font-medium rounded-xl
+                       hover:bg-brand-600 transition-colors"
           >
             Back to sign in
           </button>

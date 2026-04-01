@@ -58,7 +58,8 @@ export default function LoginPage() {
   const [password,    setPassword]    = useState('')
   const [confirmPwd,  setConfirmPwd]  = useState('')
   const [displayName, setDisplayName] = useState('')
-  const [busy,        setBusy]        = useState(false)
+  const [googleBusy,  setGoogleBusy]  = useState(false)
+  const [emailBusy,   setEmailBusy]   = useState(false)
   const [localError,  setLocalError]  = useState<string | null>(null)
 
   // Redirect to dashboard once auth resolves and user has access
@@ -81,19 +82,19 @@ export default function LoginPage() {
   }
 
   const handleGoogle = async () => {
-    setBusy(true)
+    setGoogleBusy(true)
     try { await signInWithGoogle() }
-    finally { setBusy(false) }
+    finally { setGoogleBusy(false) }
   }
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     setLocalError(null)
     if (!email || !password) { setLocalError('Please fill in all fields.'); return }
-    setBusy(true)
+    setEmailBusy(true)
     try { await signInWithEmail(email, password) }
     catch { /* error already set in useAuth */ }
-    finally { setBusy(false) }
+    finally { setEmailBusy(false) }
   }
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -103,15 +104,15 @@ export default function LoginPage() {
     if (!email)              { setLocalError('Please enter your email.'); return }
     if (password.length < 6) { setLocalError('Password must be at least 6 characters.'); return }
     if (password !== confirmPwd) { setLocalError('Passwords do not match.'); return }
-    setBusy(true)
+    setEmailBusy(true)
     try { await signUpWithEmail(email, password, displayName.trim()) }
     catch { /* error already set in useAuth */ }
-    finally { setBusy(false) }
+    finally { setEmailBusy(false) }
   }
 
-  const shownError = localError || error
-  const isBusy     = busy || loading
-  const noAccess   = !loading && userDoc &&
+  const shownError  = localError || error
+  const anyBusy     = googleBusy || emailBusy || loading
+  const noAccess    = !loading && userDoc &&
     userDoc.role !== UserRole.ADMIN &&
     userDoc.role !== UserRole.BUSINESS_OWNER
 
@@ -168,17 +169,17 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Google button (both modes) */}
+          {/* Google button (both modes) — only spins on googleBusy */}
           <button
             onClick={handleGoogle}
-            disabled={isBusy}
+            disabled={anyBusy}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl
                        border border-gray-300 bg-white text-sm font-medium text-gray-700
                        hover:bg-gray-50 active:bg-gray-100
                        disabled:opacity-50 disabled:cursor-not-allowed
                        transition-colors shadow-sm"
           >
-            {isBusy ? <Spinner /> : <GoogleLogo />}
+            {googleBusy ? <Spinner /> : <GoogleLogo />}
             {mode === 'signin' ? 'Continue with Google' : 'Sign up with Google'}
           </button>
 
@@ -197,11 +198,13 @@ export default function LoginPage() {
               <Field label="Password" type="password" value={password} onChange={setPassword}
                 placeholder="••••••••" autoComplete="current-password" />
               <button
-                type="submit" disabled={isBusy}
-                className="w-full py-2.5 bg-brand-500 text-white text-sm font-medium rounded-xl
+                type="submit" disabled={anyBusy}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-500
+                           text-white text-sm font-medium rounded-xl
                            hover:bg-brand-600 disabled:opacity-50 transition-colors shadow-sm"
               >
-                {isBusy ? 'Signing in…' : 'Sign in'}
+                {emailBusy && <Spinner />}
+                {emailBusy ? 'Signing in…' : 'Sign in'}
               </button>
             </form>
           )}
@@ -218,11 +221,13 @@ export default function LoginPage() {
               <Field label="Confirm password" type="password" value={confirmPwd} onChange={setConfirmPwd}
                 placeholder="Repeat password" autoComplete="new-password" />
               <button
-                type="submit" disabled={isBusy}
-                className="w-full py-2.5 bg-brand-500 text-white text-sm font-medium rounded-xl
+                type="submit" disabled={anyBusy}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-brand-500
+                           text-white text-sm font-medium rounded-xl
                            hover:bg-brand-600 disabled:opacity-50 transition-colors shadow-sm"
               >
-                {isBusy ? 'Creating account…' : 'Create account'}
+                {emailBusy && <Spinner />}
+                {emailBusy ? 'Creating account…' : 'Create account'}
               </button>
               <p className="text-xs text-center text-gray-400">
                 By creating an account you agree to our Terms of Service.

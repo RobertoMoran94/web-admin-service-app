@@ -168,6 +168,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const signOut = async () => {
+    // In mock mode clear state manually — no real Firebase session to end
+    if (IS_MOCK) {
+      setFirebaseUser(null)
+      setUserDoc(null)
+      return
+    }
     await firebaseSignOut(auth)
     setUserDoc(null)
   }

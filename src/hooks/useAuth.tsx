@@ -44,6 +44,27 @@ function toReadableError(err: unknown): string {
   }
 }
 
+// ── Dev mock (VITE_MOCK_AUTH=true only in development) ────────────────────────
+
+const IS_MOCK = import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true'
+
+const MOCK_USER_DOC: UserDoc = {
+  id:          'mock-admin-uid',
+  email:       'admin@demo.com',
+  displayName: 'Demo Admin',
+  role:        UserRole.ADMIN,
+  createdAt:   Date.now(),
+}
+
+// Minimal fake Firebase User object — only the fields the app actually reads
+const MOCK_FIREBASE_USER = {
+  uid:         'mock-admin-uid',
+  email:       'admin@demo.com',
+  displayName: 'Demo Admin',
+  photoURL:    null,
+  getIdToken:  async () => 'mock-token',
+} as unknown as User
+
 // ── Context shape ─────────────────────────────────────────────────────────────
 
 interface AuthState {
@@ -63,12 +84,14 @@ const AuthContext = createContext<AuthState | null>(null)
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
-  const [userDoc,      setUserDoc]      = useState<UserDoc | null>(null)
-  const [loading,      setLoading]      = useState(true)
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(IS_MOCK ? MOCK_FIREBASE_USER : null)
+  const [userDoc,      setUserDoc]      = useState<UserDoc | null>(IS_MOCK ? MOCK_USER_DOC : null)
+  const [loading,      setLoading]      = useState(!IS_MOCK)
   const [error,        setError]        = useState<string | null>(null)
 
   useEffect(() => {
+    // In mock mode skip real Firebase listener entirely
+    if (IS_MOCK) return
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       // Set loading=true immediately so UI never shows a stale "access denied"
       // while we're mid-fetch of the Firestore user doc.

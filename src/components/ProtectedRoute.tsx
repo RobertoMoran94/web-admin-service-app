@@ -28,7 +28,9 @@ export default function ProtectedRoute({ children }: Props) {
     )
   }
 
-  if (!firebaseUser) return <Navigate to="/login" replace />
+  // In dev mock mode firebaseUser is null but userDoc is set — still allow through
+  const isMock = import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true'
+  if (!firebaseUser && !isMock) return <Navigate to="/login" replace />
 
   if (!hasAccess) {
     return (

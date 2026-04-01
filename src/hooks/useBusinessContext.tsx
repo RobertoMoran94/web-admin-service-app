@@ -29,15 +29,42 @@ interface BusinessContextValue {
 
 const BusinessContext = createContext<BusinessContextValue | null>(null)
 
+// ── Dev mock ──────────────────────────────────────────────────────────────────
+const IS_MOCK = import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true'
+
+const MOCK_BUSINESS: Business = {
+  id:          'mock-business-id',
+  ownerId:     'mock-admin-uid',
+  name:        'The Demo Barbershop',
+  description: 'Premium cuts, shaves and grooming services in the heart of the city.',
+  category:    'Barbershop',
+  address:     '123 Main Street, San Francisco, CA 94105',
+  phone:       '+1 (415) 555-0123',
+  logoUrl:     '',
+  coverUrl:    '',
+  createdAt:   Date.now(),
+  hours: {
+    monday:    { open: true,  from: '09:00', to: '18:00' },
+    tuesday:   { open: true,  from: '09:00', to: '18:00' },
+    wednesday: { open: true,  from: '09:00', to: '18:00' },
+    thursday:  { open: true,  from: '09:00', to: '18:00' },
+    friday:    { open: true,  from: '09:00', to: '19:00' },
+    saturday:  { open: true,  from: '10:00', to: '16:00' },
+    sunday:    { open: false, from: '10:00', to: '14:00' },
+  },
+}
+
 export function BusinessProvider({ children }: { children: ReactNode }) {
   const { firebaseUser, userDoc, isAdmin } = useAuth()
 
-  const [business,      setBusiness]      = useState<Business | null>(null)
-  const [allBusinesses, setAllBusinesses] = useState<Business[]>([])
-  const [loading,       setLoading]       = useState(true)
+  const [business,      setBusiness]      = useState<Business | null>(IS_MOCK ? MOCK_BUSINESS : null)
+  const [allBusinesses, setAllBusinesses] = useState<Business[]>(IS_MOCK ? [MOCK_BUSINESS] : [])
+  const [loading,       setLoading]       = useState(!IS_MOCK)
   const [error,         setError]         = useState<string | null>(null)
 
   useEffect(() => {
+    if (IS_MOCK) return   // skip real Firestore in mock mode
+
     if (!firebaseUser || !userDoc) {
       setLoading(false)
       return

@@ -1,24 +1,24 @@
-import { useState } from 'react'
-import { useMockMetrics } from '../hooks/useMockMetrics'
+import { useState, useMemo } from 'react'
+import { useOwnerBookings } from '../hooks/useOwnerBookings'
+import { useBusinessContext } from '../hooks/useBusinessContext'
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
 const DOW    = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
-// Mock: number of bookings per day-of-month for the current month
-const MOCK_DAY_COUNTS: Record<number, number> = {
-  1:2, 3:4, 5:1, 7:3, 8:5, 10:2, 12:4, 14:6, 15:3, 17:2,
-  19:5, 21:1, 22:4, 23:3, 24:2, 26:4, 28:3, 29:5, 30:2,
-}
-
 const STATUS_STYLES: Record<string, string> = {
-  confirmed: 'bg-green-100 text-green-700',
-  pending:   'bg-yellow-100 text-yellow-700',
+  upcoming:  'bg-green-100 text-green-700',
+  completed: 'bg-gray-100 text-gray-600',
   cancelled: 'bg-red-100 text-red-500',
+}
+const STATUS_LABELS: Record<string, string> = {
+  upcoming:  'Confirmed',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
 }
 
 // ---------------------------------------------------------------------------
-// Spinner — reused in the modal and any future loading states
+// Spinner
 // ---------------------------------------------------------------------------
 function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
   return (
@@ -29,47 +29,67 @@ function Spinner({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
-export default function CalendarPage() {
-  const today   = new Date()
-  const [year,  setYear]  = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth())   // 0-indexed
-  const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate())
+function isoDate(d: Date): string {
+  return d.toISOString().split('T')[0]
+}
 
-  const { upcomingBookings: initial } = useMockMetrics()
-  const [bookings,       setBookings]       = useState(initial)
-  const [cancelTarget,   setCancelTarget]   = useState<string | null>(null)
-  const [cancelling,     setCancelling]     = useState(false)
-  const [toast,          setToast]          = useState<{ msg: string; ok: boolean } | null>(null)
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+export default function CalendarPage() {
+  const { business } = useBusinessContext()
+  const businessId   = business?.id ?? null
+
+  const today = new Date()
+  const [year,        setYear]        = useState(today.getFullYear())
+  const [month,       setMonth]       = useState(today.getMonth())   // 0-indexed
+  const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate())
+  const [cancelTarget,  setCancelTarget]  = useState<string | null>(null)
+  const [toast,         setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
+
+  // Fetch the whole month
+  const from = isoDate(new Date(year, month, 1))
+  const to   = isoDate(new Date(year, month + 1, 0))
+
+  const { bookings, loading, cancelling, cancelBooking } = useOwnerBookings({
+    businessId,
+    from,
+    to,
+  })
+
+  // Day-count dots derived from real bookings
+  const dayCounts = useMemo(() => {
+    const counts: Record<number, number> = {}
+    bookings.forEach((b) => {
+      const d = new Date(b.appointmentDate + 'T00:00:00')
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate()
+        counts[day] = (counts[day] ?? 0) + 1
+      }
+    })
+    return counts
+  }, [bookings, year, month])
+
+  // Bookings for the selected day
+  const selectedIso = selectedDay
+    ? `${year}-${String(month + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`
+    : null
+  const dayBookings = selectedIso
+    ? bookings.filter((b) => b.appointmentDate === selectedIso)
+    : []
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok })
     setTimeout(() => setToast(null), 3000)
   }
 
-  /**
-   * confirmCancel — async so we can await the real BE call.
-   *
-   * Right now it simulates a network round-trip (500 ms).
-   * When the Spring Boot endpoint is ready, replace the
-   * `await new Promise(...)` line with:
-   *   await api.cancelBooking(id)   // DELETE /api/v1/bookings/{id}
-   */
   const confirmCancel = async (id: string) => {
-    setCancelling(true)
     try {
-      // TODO: replace with real API call once BE is deployed
-      // await bookingApi.cancel(id)
-      await new Promise<void>((resolve) => setTimeout(resolve, 700))
-
-      setBookings((prev) =>
-        prev.map((b) => b.id === id ? { ...b, status: 'cancelled' as const } : b)
-      )
+      await cancelBooking(id)
       setCancelTarget(null)
       showToast('Booking cancelled successfully.')
     } catch {
       showToast('Failed to cancel booking — please try again.', false)
-    } finally {
-      setCancelling(false)
     }
   }
 
@@ -82,10 +102,6 @@ export default function CalendarPage() {
 
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1) } else setMonth(m => m - 1) }
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1) } else setMonth(m => m + 1) }
-
-  const dayBookings = selectedDay
-    ? bookings.filter((b) => b.date === 'Today' || b.date === 'Tomorrow')
-    : []
 
   return (
     <div className="space-y-6">
@@ -138,29 +154,37 @@ export default function CalendarPage() {
           </div>
 
           {/* Day cells */}
-          <div className="grid grid-cols-7 gap-1">
-            {cells.map((day, i) => {
-              if (!day) return <div key={`e-${i}`} />
-              const isToday    = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
-              const isSelected = day === selectedDay
-              const count      = MOCK_DAY_COUNTS[day] ?? 0
-              return (
-                <button
-                  key={day}
-                  onClick={() => setSelectedDay(day)}
-                  className={`relative flex flex-col items-center py-2 rounded-xl transition-colors text-sm font-medium
-                    ${isSelected ? 'bg-brand-500 text-white' : isToday ? 'bg-brand-50 text-brand-600' : 'hover:bg-gray-50 text-gray-700'}`}
-                >
-                  {day}
-                  {count > 0 && (
-                    <span className={`text-xs font-semibold mt-0.5 leading-none ${isSelected ? 'text-brand-100' : 'text-brand-500'}`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+          {loading ? (
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: 35 }).map((_, i) => (
+                <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-1">
+              {cells.map((day, i) => {
+                if (!day) return <div key={`e-${i}`} />
+                const isToday    = day === today.getDate() && month === today.getMonth() && year === today.getFullYear()
+                const isSelected = day === selectedDay
+                const count      = dayCounts[day] ?? 0
+                return (
+                  <button
+                    key={day}
+                    onClick={() => setSelectedDay(day)}
+                    className={`relative flex flex-col items-center py-2 rounded-xl transition-colors text-sm font-medium
+                      ${isSelected ? 'bg-brand-500 text-white' : isToday ? 'bg-brand-50 text-brand-600' : 'hover:bg-gray-50 text-gray-700'}`}
+                  >
+                    {day}
+                    {count > 0 && (
+                      <span className={`text-xs font-semibold mt-0.5 leading-none ${isSelected ? 'text-brand-100' : 'text-brand-500'}`}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* Legend */}
           <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
@@ -177,18 +201,24 @@ export default function CalendarPage() {
               : 'Select a day'}
           </h3>
 
-          {selectedDay && dayBookings.length > 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-20 bg-gray-100 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : selectedDay && dayBookings.length > 0 ? (
             <div className="space-y-3">
               {dayBookings.map((b) => (
                 <div key={b.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded-xl">
                   <div className="w-1 h-12 rounded-full bg-brand-500 shrink-0 mt-0.5" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">{b.time} — {b.customerName}</p>
-                    <p className="text-xs text-gray-500">{b.service} · {b.employee}</p>
+                    <p className="text-sm font-medium text-gray-900">{b.appointmentTime} — {b.customerName}</p>
+                    <p className="text-xs text-gray-500">{b.serviceNames.join(', ')} · {b.stylistName ?? '—'}</p>
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs font-semibold text-gray-700">${b.price}</p>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status]}`}>
-                        {b.status}
+                      <p className="text-xs font-semibold text-gray-700">{b.total}</p>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLES[b.status] ?? ''}`}>
+                        {STATUS_LABELS[b.status] ?? b.status}
                       </span>
                     </div>
                     {b.status !== 'cancelled' && (

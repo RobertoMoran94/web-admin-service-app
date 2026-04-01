@@ -132,38 +132,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  /**
+   * Email sign-in. Throws a readable string on failure so LoginPage can
+   * display it wherever it wants (below the form, not above the Google button).
+   */
   const signInWithEmail = async (email: string, password: string) => {
-    setError(null)
     try {
       await signInWithEmailAndPassword(auth, email, password)
+      // onAuthStateChanged handles redirect
     } catch (err) {
-      const msg = toReadableError(err)
-      setError(msg || 'Sign-in failed.')
-      throw err
+      throw new Error(toReadableError(err) || 'Sign-in failed.')
     }
   }
 
   /**
    * Creates a Firebase Auth user + Firestore doc with role = business_owner.
-   * Since this is the Business Portal, anyone self-registering is a business owner.
-   * Admin accounts must be set manually in Firestore.
+   *
+   * Race-condition fix: `createUserWithEmailAndPassword` signs the user in
+   * immediately, firing `onAuthStateChanged` BEFORE `setDoc` has run.
+   * That first listener call finds no Firestore doc → userDoc stays null →
+   * redirect never fires. We fix this by manually setting userDoc right after
+   * `setDoc` so the redirect useEffect in LoginPage can react.
+   *
+   * Throws a readable string on failure so LoginPage can display it below the
+   * form rather than above the Google button.
    */
   const signUpWithEmail = async (email: string, password: string, displayName: string) => {
-    setError(null)
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email, password)
       await updateProfile(user, { displayName })
-      await setDoc(doc(db, 'users', user.uid), {
+      const userData = {
         email:       user.email ?? email,
         displayName,
         role:        UserRole.BUSINESS_OWNER,
         createdAt:   serverTimestamp(),
+      }
+      await setDoc(doc(db, 'users', user.uid), userData)
+      // Manually set userDoc — don't wait for a second onAuthStateChanged cycle
+      setUserDoc({
+        id:          user.uid,
+        email:       user.email ?? email,
+        displayName,
+        role:        UserRole.BUSINESS_OWNER,
+        createdAt:   Date.now(),
       })
-      // onAuthStateChanged fires, fetches the new doc, and loading goes false
     } catch (err) {
-      const msg = toReadableError(err)
-      setError(msg || 'Sign-up failed.')
-      throw err
+      throw new Error(toReadableError(err) || 'Sign-up failed.')
     }
   }
 

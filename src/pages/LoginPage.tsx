@@ -5,7 +5,7 @@ import { UserRole } from '../types'
 
 type AuthMode = 'signin' | 'signup'
 
-// ── Small reusable input ──────────────────────────────────────────────────────
+// ── Small reusable text input ──────────────────────────────────────────────────
 function Field({
   label, type = 'text', value, onChange, placeholder, autoComplete,
 }: {
@@ -26,6 +26,64 @@ function Field({
   )
 }
 
+// ── Password input with show/hide toggle ──────────────────────────────────────
+function PasswordField({
+  label, value, onChange, placeholder, autoComplete,
+}: {
+  label: string; value: string
+  onChange: (v: string) => void; placeholder?: string; autoComplete?: string
+}) {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div className="relative">
+        <input
+          type={visible ? 'text' : 'password'}
+          value={value}
+          placeholder={placeholder}
+          autoComplete={autoComplete}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 pr-10 text-sm
+                     focus:outline-none focus:ring-2 focus:ring-brand-500 transition-shadow"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          tabIndex={-1}
+          className="absolute inset-y-0 right-3 flex items-center text-gray-400
+                     hover:text-gray-600 transition-colors"
+          aria-label={visible ? 'Hide password' : 'Show password'}
+        >
+          {visible ? (
+            // Eye-off icon
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7
+                   a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243
+                   M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29
+                   M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943
+                   9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            </svg>
+          ) : (
+            // Eye icon
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round"
+                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943
+                   9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+          )}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Google logo SVG ───────────────────────────────────────────────────────────
 function GoogleLogo() {
   return (
@@ -41,16 +99,25 @@ function GoogleLogo() {
 // ── Spinner ───────────────────────────────────────────────────────────────────
 function Spinner() {
   return (
-    <svg className="animate-spin w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24">
+    <svg className="animate-spin w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
     </svg>
   )
 }
 
+// ── Error banner ──────────────────────────────────────────────────────────────
+function ErrorBanner({ message }: { message: string }) {
+  return (
+    <div className="p-3 rounded-lg bg-red-50 border border-red-200">
+      <p className="text-sm text-red-700">{message}</p>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
-  const { userDoc, loading, error, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth()
+  const { userDoc, loading, error: googleError, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth()
   const navigate = useNavigate()
 
   const [mode,        setMode]        = useState<AuthMode>('signin')
@@ -60,9 +127,11 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('')
   const [googleBusy,  setGoogleBusy]  = useState(false)
   const [emailBusy,   setEmailBusy]   = useState(false)
-  const [localError,  setLocalError]  = useState<string | null>(null)
+  // Separate error states: googleError (from useAuth) for Google button area,
+  // formError for validation + email auth errors shown below the form button
+  const [formError,   setFormError]   = useState<string | null>(null)
 
-  // Redirect to dashboard once auth resolves and user has access
+  // Redirect once auth resolves and user has access
   useEffect(() => {
     if (!loading && userDoc) {
       const hasAccess =
@@ -74,45 +143,57 @@ export default function LoginPage() {
 
   const switchMode = (m: AuthMode) => {
     setMode(m)
-    setLocalError(null)
+    setFormError(null)
     setEmail('')
     setPassword('')
     setConfirmPwd('')
     setDisplayName('')
   }
 
+  // ── Google ──────────────────────────────────────────────────────────────────
   const handleGoogle = async () => {
     setGoogleBusy(true)
     try { await signInWithGoogle() }
     finally { setGoogleBusy(false) }
   }
 
+  // ── Email sign-in ───────────────────────────────────────────────────────────
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLocalError(null)
-    if (!email || !password) { setLocalError('Please fill in all fields.'); return }
+    setFormError(null)
+    if (!email)    { setFormError('Please enter your email.'); return }
+    if (!password) { setFormError('Please enter your password.'); return }
     setEmailBusy(true)
-    try { await signInWithEmail(email, password) }
-    catch { /* error already set in useAuth */ }
-    finally { setEmailBusy(false) }
+    try {
+      await signInWithEmail(email, password)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Sign-in failed.')
+    } finally {
+      setEmailBusy(false)
+    }
   }
 
+  // ── Email sign-up ───────────────────────────────────────────────────────────
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    setLocalError(null)
-    if (!displayName.trim()) { setLocalError('Please enter your name.'); return }
-    if (!email)              { setLocalError('Please enter your email.'); return }
-    if (password.length < 6) { setLocalError('Password must be at least 6 characters.'); return }
-    if (password !== confirmPwd) { setLocalError('Passwords do not match.'); return }
+    setFormError(null)
+    if (!displayName.trim())     { setFormError('Please enter your full name.'); return }
+    if (!email)                  { setFormError('Please enter your email.'); return }
+    if (password.length < 6)     { setFormError('Password must be at least 6 characters.'); return }
+    if (password !== confirmPwd) { setFormError('Passwords do not match.'); return }
     setEmailBusy(true)
-    try { await signUpWithEmail(email, password, displayName.trim()) }
-    catch { /* error already set in useAuth */ }
-    finally { setEmailBusy(false) }
+    try {
+      await signUpWithEmail(email, password, displayName.trim())
+      // userDoc is set inside signUpWithEmail → useEffect above fires → redirect
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Sign-up failed.')
+    } finally {
+      setEmailBusy(false)
+    }
   }
 
-  const shownError  = localError || error
-  const anyBusy     = googleBusy || emailBusy || loading
-  const noAccess    = !loading && userDoc &&
+  const anyBusy  = googleBusy || emailBusy || loading
+  const noAccess = !loading && userDoc &&
     userDoc.role !== UserRole.ADMIN &&
     userDoc.role !== UserRole.BUSINESS_OWNER
 
@@ -123,7 +204,8 @@ export default function LoginPage() {
         {/* Brand */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-brand-500 mb-4">
-            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round"
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
@@ -154,22 +236,13 @@ export default function LoginPage() {
 
           {/* Access denied */}
           {noAccess && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-700">
-                <strong>Access denied.</strong> Your account does not have portal access.
-                Contact an admin to request access.
-              </p>
-            </div>
+            <ErrorBanner message="Your account doesn't have portal access. Contact an admin." />
           )}
 
-          {/* Error */}
-          {shownError && (
-            <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200">
-              <p className="text-sm text-red-700">{shownError}</p>
-            </div>
-          )}
+          {/* Google error — shown here, above the Google button */}
+          {googleError && <div className="mb-4"><ErrorBanner message={googleError} /></div>}
 
-          {/* Google button (both modes) — only spins on googleBusy */}
+          {/* Google button */}
           <button
             onClick={handleGoogle}
             disabled={anyBusy}
@@ -190,12 +263,12 @@ export default function LoginPage() {
             <div className="flex-1 h-px bg-gray-200" />
           </div>
 
-          {/* Sign in form */}
+          {/* ── Sign in form ── */}
           {mode === 'signin' && (
             <form onSubmit={handleEmailSignIn} className="space-y-4">
               <Field label="Email" type="email" value={email} onChange={setEmail}
                 placeholder="you@example.com" autoComplete="email" />
-              <Field label="Password" type="password" value={password} onChange={setPassword}
+              <PasswordField label="Password" value={password} onChange={setPassword}
                 placeholder="••••••••" autoComplete="current-password" />
               <button
                 type="submit" disabled={anyBusy}
@@ -206,19 +279,21 @@ export default function LoginPage() {
                 {emailBusy && <Spinner />}
                 {emailBusy ? 'Signing in…' : 'Sign in'}
               </button>
+              {/* Form error shown below the submit button */}
+              {formError && <ErrorBanner message={formError} />}
             </form>
           )}
 
-          {/* Sign up form */}
+          {/* ── Sign up form ── */}
           {mode === 'signup' && (
             <form onSubmit={handleSignUp} className="space-y-4">
               <Field label="Full name" value={displayName} onChange={setDisplayName}
                 placeholder="Jane Smith" autoComplete="name" />
               <Field label="Email" type="email" value={email} onChange={setEmail}
                 placeholder="you@example.com" autoComplete="email" />
-              <Field label="Password" type="password" value={password} onChange={setPassword}
+              <PasswordField label="Password" value={password} onChange={setPassword}
                 placeholder="Min 6 characters" autoComplete="new-password" />
-              <Field label="Confirm password" type="password" value={confirmPwd} onChange={setConfirmPwd}
+              <PasswordField label="Confirm password" value={confirmPwd} onChange={setConfirmPwd}
                 placeholder="Repeat password" autoComplete="new-password" />
               <button
                 type="submit" disabled={anyBusy}
@@ -229,6 +304,8 @@ export default function LoginPage() {
                 {emailBusy && <Spinner />}
                 {emailBusy ? 'Creating account…' : 'Create account'}
               </button>
+              {/* Form error shown below the submit button */}
+              {formError && <ErrorBanner message={formError} />}
               <p className="text-xs text-center text-gray-400">
                 By creating an account you agree to our Terms of Service.
               </p>

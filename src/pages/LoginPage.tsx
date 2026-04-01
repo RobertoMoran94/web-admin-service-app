@@ -117,7 +117,7 @@ function ErrorBanner({ message }: { message: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LoginPage() {
-  const { userDoc, loading, error: googleError, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth()
+  const { userDoc, loading, error: authError, signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth()
   const navigate = useNavigate()
 
   const [mode,        setMode]        = useState<AuthMode>('signin')
@@ -127,8 +127,9 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('')
   const [googleBusy,  setGoogleBusy]  = useState(false)
   const [emailBusy,   setEmailBusy]   = useState(false)
-  // Separate error states: googleError (from useAuth) for Google button area,
-  // formError for validation + email auth errors shown below the form button
+  // Separate error states:
+  //   authError  — from useAuth (Google SSO failures, Firestore errors) — shown above Google button
+  //   formError  — validation + email/password Firebase errors — shown below the submit button
   const [formError,   setFormError]   = useState<string | null>(null)
 
   // Redirect once auth resolves and user has access
@@ -239,8 +240,8 @@ export default function LoginPage() {
             <ErrorBanner message="Your account doesn't have portal access. Contact an admin." />
           )}
 
-          {/* Google error — shown here, above the Google button */}
-          {googleError && <div className="mb-4"><ErrorBanner message={googleError} /></div>}
+          {/* Auth-level errors (Google SSO failures, Firestore permission errors) */}
+          {authError && <div className="mb-4"><ErrorBanner message={authError} /></div>}
 
           {/* Google button */}
           <button

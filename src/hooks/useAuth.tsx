@@ -100,14 +100,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (fbUser) {
         try {
-          const snap = await getDoc(doc(db, 'users', fbUser.uid))
+          const ref  = doc(db, 'users', fbUser.uid)
+          const snap = await getDoc(ref)
+
           if (snap.exists()) {
+            // Doc found — use it as-is (role may be customer / business_owner / admin)
             setUserDoc({ id: fbUser.uid, ...snap.data() } as UserDoc)
           } else {
-            setUserDoc(null)
+            // No Firestore doc — this happens when:
+            //   a) Account created via old buggy signup flow (race condition now fixed)
+            //   b) Google sign-in for a brand-new user hitting the portal for the first time
+            // Auto-create with role = business_owner since this is the Business Portal.
+            const newDoc = {
+              email:       fbUser.email ?? '',
+              displayName: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'User',
+              role:        UserRole.BUSINESS_OWNER,
+              createdAt:   serverTimestamp(),
+            }
+            await setDoc(ref, newDoc)
+            setUserDoc({
+              id:          fbUser.uid,
+              ...newDoc,
+              createdAt:   Date.now(),
+            })
           }
         } catch (err) {
-          console.error('useAuth: failed to fetch user doc', err)
+          // Surface Firestore errors to the user instead of silently getting stuck
+          console.error('useAuth: Firestore error', err)
+          const msg = err instanceof Error ? err.message : String(err)
+          // Check for permission-denied which means security rules need updating
+          if (msg.includes('permission-denied') || msg.includes('Missing or insufficient')) {
+            setError('Database permission error. Please check your Firestore security rules.')
+          } else {
+            setError('Failed to load your account. Please try again.')
+          }
           setUserDoc(null)
         }
       } else {

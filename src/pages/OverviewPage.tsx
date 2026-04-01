@@ -2,9 +2,10 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, BarChart, Bar,
 } from 'recharts'
-import { useAnalytics } from '../hooks/useAnalytics'
-import { useOwnerBookings } from '../hooks/useOwnerBookings'
+import { useAnalytics }      from '../hooks/useAnalytics'
+import { useOwnerBookings }  from '../hooks/useOwnerBookings'
 import { useBusinessContext } from '../hooks/useBusinessContext'
+import { useFeatureFlags, FLAG_ANALYTICS_ENABLED } from '../hooks/useFeatureFlags'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -55,9 +56,12 @@ function todayPlusDays(n: number): string {
 export default function OverviewPage() {
   const { business } = useBusinessContext()
   const businessId   = business?.id ?? null
+  const { flags }    = useFeatureFlags()
 
-  // Analytics — last 30 days
-  const { data, loading: analyticsLoading, error: analyticsError } = useAnalytics(businessId)
+  // Analytics — last 30 days (skipped when flag is off)
+  const { data, loading: analyticsLoading, error: analyticsError } = useAnalytics(
+    flags[FLAG_ANALYTICS_ENABLED] ? businessId : null
+  )
 
   // Upcoming bookings — today + next 2 days
   const { bookings: upcoming, loading: bookingsLoading } = useOwnerBookings({
@@ -79,8 +83,15 @@ export default function OverviewPage() {
         </p>
       </div>
 
+      {/* Analytics disabled banner */}
+      {!flags[FLAG_ANALYTICS_ENABLED] && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-xl px-4 py-3">
+          Analytics is temporarily unavailable.
+        </div>
+      )}
+
       {/* Error banner */}
-      {analyticsError && (
+      {flags[FLAG_ANALYTICS_ENABLED] && analyticsError && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
           Could not load analytics — {analyticsError}
         </div>

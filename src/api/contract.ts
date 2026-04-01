@@ -69,6 +69,7 @@ export interface ServiceStatDto {
 }
 
 export interface AnalyticsOverviewDto {
+  analyticsEnabled:         boolean  // false when Remote Config flag is off — show disabled state for analytics section only
   totalRevenue:             string   // pre-formatted e.g. "$3,072.00"
   totalBookings:            number
   newCustomers:             number

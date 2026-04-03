@@ -3,6 +3,11 @@ import { useAuth } from '../hooks/useAuth'
 import { useBusinessContext } from '../hooks/useBusinessContext'
 import { useNavItems, ICON_PATHS } from '../hooks/useNavItems'
 
+interface SidebarProps {
+  isOpen: boolean
+  onClose: () => void
+}
+
 // ── Icon renderer ─────────────────────────────────────────────────────────────
 // Renders the SVG path from the ICON_PATHS map so Sidebar stays free of
 // hardcoded path data. When nav items come from the BE, this still works.
@@ -18,7 +23,7 @@ function NavIcon({ name }: { name: string }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { userDoc, isAdmin, signOut } = useAuth()
   const { business, allBusinesses, selectBusiness } = useBusinessContext()
   const navItems = useNavItems()
@@ -29,20 +34,42 @@ export default function Sidebar() {
     navigate('/login', { replace: true })
   }
 
+  // On mobile: slide in/out as a drawer over the content (fixed, z-50).
+  // On md+: always visible as a static sidebar (relative, no transform).
+  const mobileClass = isOpen ? 'translate-x-0' : '-translate-x-full'
+
   return (
-    <aside className="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
+    <aside className={`
+      fixed inset-y-0 left-0 z-50 w-60 shrink-0 bg-white border-r border-gray-200
+      flex flex-col h-screen transition-transform duration-300 ease-in-out
+      md:relative md:translate-x-0 md:z-auto
+      ${mobileClass}
+    `}>
 
       {/* Brand */}
       <div className="px-5 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-500 shrink-0">
-            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24"
-              stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-500 shrink-0">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24"
+                stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <span className="font-semibold text-gray-900 text-sm">Business Portal</span>
           </div>
-          <span className="font-semibold text-gray-900 text-sm">Business Portal</span>
+          {/* Close button — only shown on mobile */}
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition-colors md:hidden"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -82,6 +109,7 @@ export default function Sidebar() {
           <NavLink
             key={path}
             to={path}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                 isActive

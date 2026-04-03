@@ -68,8 +68,9 @@ export default function OverviewPage() {
     to:   todayPlusDays(2),
   })
 
-  // analyticsEnabled comes from the response itself (set by BE Remote Config gate)
-  const analyticsEnabled = data?.analyticsEnabled ?? true
+  // analyticsEnabled comes from the response itself (set by BE Remote Config gate).
+  // Default false = fail closed: hidden until the API explicitly says it's enabled.
+  const analyticsEnabled = data?.analyticsEnabled ?? false
 
   return (
     <div className="space-y-6">
@@ -88,7 +89,7 @@ export default function OverviewPage() {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
           Could not load analytics — {analyticsError}
         </div>
-      ) : !analyticsEnabled ? (
+      ) : !analyticsLoading && !analyticsEnabled ? (
         /* Feature disabled — only the analytics section shows this notice */
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-xl px-4 py-3">
           Analytics is temporarily unavailable.

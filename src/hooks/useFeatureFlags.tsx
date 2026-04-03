@@ -16,8 +16,8 @@ export const FLAG_BOOKING_CANCELLATION_ENABLED = 'booking_cancellation_enabled'
 // ── Safe in-app defaults (used before fetch completes or on error) ────────────
 
 const FLAG_DEFAULTS = {
-  [FLAG_ANALYTICS_ENABLED]:            true,
-  [FLAG_BOOKING_CANCELLATION_ENABLED]: true,
+  [FLAG_ANALYTICS_ENABLED]:            false,
+  [FLAG_BOOKING_CANCELLATION_ENABLED]: false,
 } as const
 
 // Apply defaults to the SDK instance so getBoolean() is safe before the first

@@ -2,9 +2,10 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis,
   CartesianGrid, Tooltip, BarChart, Bar,
 } from 'recharts'
-import { useAnalytics } from '../hooks/useAnalytics'
-import { useOwnerBookings } from '../hooks/useOwnerBookings'
+import { useAnalytics }      from '../hooks/useAnalytics'
+import { useOwnerBookings }  from '../hooks/useOwnerBookings'
 import { useBusinessContext } from '../hooks/useBusinessContext'
+import { useFeatureFlags } from '../hooks/useFeatureFlags'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,17 +57,19 @@ export default function OverviewPage() {
   const { business } = useBusinessContext()
   const businessId   = business?.id ?? null
 
-  // Analytics — last 30 days
+  // Analytics always fetches — the BE returns analyticsEnabled:false when the flag is off
+  // so the page still loads and the appointments section below is never blocked.
   const { data, loading: analyticsLoading, error: analyticsError } = useAnalytics(businessId)
 
-  // Upcoming bookings — today + next 2 days
+  // Upcoming bookings — always fetched independently, unaffected by analytics flag
   const { bookings: upcoming, loading: bookingsLoading } = useOwnerBookings({
     businessId,
     from: isoDate(new Date()),
     to:   todayPlusDays(2),
   })
 
-  const loading = analyticsLoading || bookingsLoading
+  // analyticsEnabled comes from the response itself (set by BE Remote Config gate)
+  const analyticsEnabled = data?.analyticsEnabled ?? true
 
   return (
     <div className="space-y-6">
@@ -79,16 +82,22 @@ export default function OverviewPage() {
         </p>
       </div>
 
-      {/* Error banner */}
-      {analyticsError && (
+      {/* Analytics section — gated by analyticsEnabled from the response */}
+      {analyticsError ? (
+        /* Error state — only the analytics section is affected */
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
           Could not load analytics — {analyticsError}
         </div>
-      )}
+      ) : !analyticsEnabled ? (
+        /* Feature disabled — only the analytics section shows this notice */
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-xl px-4 py-3">
+          Analytics is temporarily unavailable.
+        </div>
+      ) : null}
 
-      {/* Metric cards */}
+      {/* Metric cards — hidden when analytics is disabled */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {loading && !data ? (
+        {analyticsLoading && !data ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm animate-pulse">
               <div className="h-3 bg-gray-200 rounded w-2/3 mb-3" />
@@ -96,7 +105,7 @@ export default function OverviewPage() {
               <div className="h-3 bg-gray-200 rounded w-1/3" />
             </div>
           ))
-        ) : data ? (
+        ) : data && analyticsEnabled ? (
           [
             {
               label: 'Total Revenue',
@@ -132,8 +141,8 @@ export default function OverviewPage() {
         ) : null}
       </div>
 
-      {/* Charts row */}
-      {data && (
+      {/* Charts row — only when analytics is enabled and data is available */}
+      {data && analyticsEnabled && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Revenue line chart — 2/3 width */}

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider }        from './hooks/useAuth'
+import { AuthProvider }           from './hooks/useAuth'
+import { FeatureFlagsProvider }   from './hooks/useFeatureFlags'
 import ProtectedRoute          from './components/ProtectedRoute'
 import Layout                  from './components/Layout'
 import LoginPage               from './pages/LoginPage'
@@ -31,19 +32,21 @@ function DashboardRoutes() {
 export default function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route
-            path="/*"
-            element={
-              <ProtectedRoute>
-                <DashboardRoutes />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
-      </AuthProvider>
+      <FeatureFlagsProvider>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoute>
+                  <DashboardRoutes />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </AuthProvider>
+      </FeatureFlagsProvider>
     </BrowserRouter>
   )
 }

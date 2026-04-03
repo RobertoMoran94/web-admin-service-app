@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react'
-import { useOwnerBookings } from '../hooks/useOwnerBookings'
+import { useOwnerBookings }  from '../hooks/useOwnerBookings'
 import { useBusinessContext } from '../hooks/useBusinessContext'
+import { useFeatureFlags, FLAG_BOOKING_CANCELLATION_ENABLED } from '../hooks/useFeatureFlags'
 
 const MONTHS = ['January','February','March','April','May','June',
                 'July','August','September','October','November','December']
@@ -39,6 +40,7 @@ function isoDate(d: Date): string {
 export default function CalendarPage() {
   const { business } = useBusinessContext()
   const businessId   = business?.id ?? null
+  const { flags }    = useFeatureFlags()
 
   const today = new Date()
   const [year,        setYear]        = useState(today.getFullYear())
@@ -221,7 +223,7 @@ export default function CalendarPage() {
                         {STATUS_LABELS[b.status] ?? b.status}
                       </span>
                     </div>
-                    {b.status !== 'cancelled' && (
+                    {b.status !== 'cancelled' && flags[FLAG_BOOKING_CANCELLATION_ENABLED] && (
                       <button
                         onClick={() => setCancelTarget(b.id)}
                         className="mt-2 text-xs text-red-500 hover:text-red-700 font-medium transition-colors"

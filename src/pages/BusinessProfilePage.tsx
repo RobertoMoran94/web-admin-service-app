@@ -6,7 +6,7 @@ import { useServices } from '../hooks/useServices'
 import { useEmployees } from '../hooks/useEmployees'
 import { defaultHours, type Business, type BusinessHours, type DayHours, type Service, type Employee } from '../types'
 import ImageUpload from '../components/ImageUpload'
-import { apiPost, apiPut } from '../api/client'
+import { apiPut } from '../api/client'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -446,8 +446,7 @@ function ProfileEditor({
     address: string; phone: string; logoUrl: string; coverUrl: string
     hours: BusinessHours
   }
-  /** null when the business hasn't been created yet — triggers POST instead of PUT */
-  businessId: string | null
+  businessId: string
   onSaved: () => void
   onCancel: () => void
 }) {
@@ -466,39 +465,26 @@ function ProfileEditor({
     setError(null)
     setSaving(true)
     try {
-      if (!businessId) {
-        // No business yet — create it via BE (POST /api/v1/business)
-        await apiPost('/business', {
-          name:          form.name,
-          categories:    [form.category],
-          description:   form.description,
-          address:       form.address,
-          phone:         form.phone,
-          logoUrl:       form.logoUrl,
-          coverPhotoUrl: form.coverUrl,
-        })
-      } else {
-        // Existing business — update via BE (PUT /api/v1/edit-business-profile/{id})
-        await apiPut(`/edit-business-profile/${businessId}`, {
-          name:                 form.name,
-          categories:           [form.category],
-          description:          form.description,
-          address:              form.address,
-          phone:                form.phone,
-          logoUrl:              form.logoUrl,
-          coverPhotoUrl:        form.coverUrl,
-          email:                '',
-          website:              '',
-          instagramUrl:         '',
-          city:                 '',
-          state:                '',
-          zipCode:              '',
-          hours:                toBeHours(hours),
-          onlineBookingEnabled: true,
-          instantConfirmation:  true,
-          smsNotifications:     false,
-        })
-      }
+      // Business always exists (created automatically on registration) — always PUT
+      await apiPut(`/edit-business-profile/${businessId}`, {
+        name:                 form.name,
+        categories:           [form.category],
+        description:          form.description,
+        address:              form.address,
+        phone:                form.phone,
+        logoUrl:              form.logoUrl,
+        coverPhotoUrl:        form.coverUrl,
+        email:                '',
+        website:              '',
+        instagramUrl:         '',
+        city:                 '',
+        state:                '',
+        zipCode:              '',
+        hours:                toBeHours(hours),
+        onlineBookingEnabled: true,
+        instantConfirmation:  true,
+        smsNotifications:     false,
+      })
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save. Please try again.')
@@ -536,10 +522,10 @@ function ProfileEditor({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <ImageUpload label="Logo" shape="circle"
             value={form.logoUrl} onChange={(url) => patch('logoUrl', url)}
-            storagePath={`businesses/${businessId ?? 'new'}/logo`} />
+            storagePath={`businesses/${businessId}/logo`} />
           <ImageUpload label="Cover photo" shape="rect"
             value={form.coverUrl} onChange={(url) => patch('coverUrl', url)}
-            storagePath={`businesses/${businessId ?? 'new'}/cover`} />
+            storagePath={`businesses/${businessId}/cover`} />
         </div>
       </div>
 
@@ -664,16 +650,13 @@ export default function BusinessProfilePage() {
     hours:       business?.hours       ?? defaultHours(),
   }
 
-  if (!firebaseUser) return null
-
-  // null when no business created yet — ProfileEditor will POST to /business
-  const businessId = business?.id ?? null
+  if (!firebaseUser || !business) return null
 
   if (mode === 'edit') {
     return (
       <ProfileEditor
         initial={initialForm}
-        businessId={businessId}
+        businessId={business.id}
         onSaved={() => { refresh(); setMode('preview') }}
         onCancel={() => setMode('preview')}
       />

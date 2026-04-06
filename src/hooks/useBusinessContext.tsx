@@ -3,18 +3,64 @@ import {
   useContext,
   useEffect,
   useState,
+  useCallback,
   type ReactNode,
 } from 'react'
 import {
   collection,
   getDocs,
-  onSnapshot,
-  query,
-  where,
 } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import { useAuth } from './useAuth'
-import { UserRole, type Business } from '../types'
+import { UserRole, type Business, type BusinessHours } from '../types'
+import { apiGet, ApiError } from '../api/client'
+import { defaultHours } from '../types'
+
+// ── BE response types ─────────────────────────────────────────────────────────
+
+interface BeHoursEntry {
+  day:         string    // "monday", "tuesday", ...
+  displayName: string
+  isOpen:      boolean
+  openTime:    string    // "09:00"
+  closeTime:   string    // "18:00"
+}
+
+interface BeBusinessProfile {
+  businessId:    string
+  ownerId:       string
+  name:          string
+  categories:    string[]
+  description:   string
+  address:       string
+  phone:         string
+  logoUrl:       string
+  coverPhotoUrl: string
+  hours:         BeHoursEntry[]
+}
+
+function beProfileToBusiness(profile: BeBusinessProfile): Business {
+  const hoursObj = defaultHours()
+  for (const h of profile.hours) {
+    const day = h.day as keyof BusinessHours
+    if (day in hoursObj) {
+      hoursObj[day] = { open: h.isOpen, from: h.openTime, to: h.closeTime }
+    }
+  }
+  return {
+    id:          profile.businessId,
+    ownerId:     profile.ownerId,
+    name:        profile.name,
+    description: profile.description,
+    category:    profile.categories[0] ?? '',
+    address:     profile.address,
+    phone:       profile.phone,
+    logoUrl:     profile.logoUrl,
+    coverUrl:    profile.coverPhotoUrl,
+    createdAt:   Date.now(),
+    hours:       hoursObj,
+  }
+}
 
 interface BusinessContextValue {
   /** The currently selected/active business */
@@ -25,6 +71,8 @@ interface BusinessContextValue {
   error:           string | null
   /** Admin only: switch the viewed business */
   selectBusiness:  (b: Business) => void
+  /** Re-fetches the business from the BE — call after create/save */
+  refresh:         () => void
 }
 
 const BusinessContext = createContext<BusinessContextValue | null>(null)
@@ -61,9 +109,13 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
   const [allBusinesses, setAllBusinesses] = useState<Business[]>(IS_MOCK ? [MOCK_BUSINESS] : [])
   const [loading,       setLoading]       = useState(!IS_MOCK)
   const [error,         setError]         = useState<string | null>(null)
+  // Incrementing this triggers a re-fetch without changing any other dep
+  const [refreshKey,    setRefreshKey]    = useState(0)
+
+  const refresh = useCallback(() => setRefreshKey((k) => k + 1), [])
 
   useEffect(() => {
-    if (IS_MOCK) return   // skip real Firestore in mock mode
+    if (IS_MOCK) return   // skip real fetch in mock mode
 
     if (!firebaseUser || !userDoc) {
       setLoading(false)
@@ -71,9 +123,12 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true)
+    setError(null)
 
     if (isAdmin) {
-      // Admins: load all businesses
+      // TODO (Phase 4): replace with GET /api/v1/admin/businesses once BE admin
+      //                 endpoints are implemented. For now admins still read from
+      //                 Firestore so existing businesses remain visible.
       getDocs(collection(db, 'businesses'))
         .then((snap) => {
           const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Business))
@@ -83,32 +138,29 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         .catch((e) => setError(e.message))
         .finally(() => setLoading(false))
     } else if (userDoc.role === UserRole.BUSINESS_OWNER) {
-      // Business owner: subscribe to their own business document
-      const q = query(
-        collection(db, 'businesses'),
-        where('ownerId', '==', firebaseUser.uid),
-      )
-      const unsub = onSnapshot(
-        q,
-        (snap) => {
-          if (!snap.empty) {
-            setBusiness({ id: snap.docs[0].id, ...snap.docs[0].data() } as Business)
+      // Business owner: fetch own business from MongoDB via BE.
+      // 404 means no business created yet — that's a valid state (not an error).
+      apiGet<BeBusinessProfile>(`/business/profile/${firebaseUser.uid}`)
+        .then((profile) => setBusiness(beProfileToBusiness(profile)))
+        .catch((err) => {
+          if (err instanceof ApiError && err.status === 404) {
+            setBusiness(null)   // no business yet — profile page will offer creation
+          } else {
+            setError(err instanceof Error ? err.message : 'Failed to load business.')
           }
-          setLoading(false)
-        },
-        (e) => { setError(e.message); setLoading(false) },
-      )
-      return unsub
+        })
+        .finally(() => setLoading(false))
     } else {
       setLoading(false)
     }
-  }, [firebaseUser, userDoc, isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseUser, userDoc, isAdmin, refreshKey])
 
   const selectBusiness = (b: Business) => setBusiness(b)
 
   return (
     <BusinessContext.Provider
-      value={{ business, allBusinesses, loading, error, selectBusiness }}
+      value={{ business, allBusinesses, loading, error, selectBusiness, refresh }}
     >
       {children}
     </BusinessContext.Provider>

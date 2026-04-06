@@ -21,6 +21,17 @@
 import { auth } from '../lib/firebase'
 
 // ---------------------------------------------------------------------------
+// ApiError — carries HTTP status so callers can branch on 404 vs 5xx etc.
+// ---------------------------------------------------------------------------
+
+export class ApiError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -74,7 +85,7 @@ async function request<T>(
 
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    throw new Error(body?.message ?? `HTTP ${res.status}: ${res.statusText}`)
+    throw new ApiError(res.status, body?.message ?? `HTTP ${res.status}: ${res.statusText}`)
   }
 
   const json = await res.json()

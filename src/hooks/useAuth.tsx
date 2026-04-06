@@ -14,9 +14,30 @@ import {
   updateProfile,
   signOut as firebaseSignOut,
 } from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db, googleProvider } from '../lib/firebase'
-import { UserRole, type UserDoc } from '../types'
+import { auth, googleProvider } from '../lib/firebase'
+import { UserRole, type UserDoc, type UserRoleValue } from '../types'
+import { apiGet, apiPost, ApiError } from '../api/client'
+
+// ── BE response type ──────────────────────────────────────────────────────────
+
+interface UserMeResponse {
+  uid:         string
+  email:       string
+  displayName: string
+  role:        UserRoleValue
+  businessId?: string | null
+}
+
+function toUserDoc(fbUid: string, res: UserMeResponse): UserDoc {
+  return {
+    id:          fbUid,
+    email:       res.email,
+    displayName: res.displayName,
+    role:        res.role,
+    createdAt:   Date.now(),
+    businessId:  res.businessId ?? undefined,
+  }
+}
 
 // ── Error helper ──────────────────────────────────────────────────────────────
 
@@ -92,49 +113,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // In mock mode skip real Firebase listener entirely
     if (IS_MOCK) return
+
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       // Set loading=true immediately so UI never shows a stale "access denied"
-      // while we're mid-fetch of the Firestore user doc.
+      // while we're mid-fetch.
       setLoading(true)
       setFirebaseUser(fbUser)
 
       if (fbUser) {
         try {
-          const ref  = doc(db, 'users', fbUser.uid)
-          const snap = await getDoc(ref)
-
-          if (snap.exists()) {
-            // Doc found — use it as-is (role may be customer / business_owner / admin)
-            setUserDoc({ id: fbUser.uid, ...snap.data() } as UserDoc)
-          } else {
-            // No Firestore doc — this happens when:
-            //   a) Account created via old buggy signup flow (race condition now fixed)
-            //   b) Google sign-in for a brand-new user hitting the portal for the first time
-            // Auto-create with role = business_owner since this is the Business Portal.
-            const newDoc = {
-              email:       fbUser.email ?? '',
-              displayName: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'User',
-              role:        UserRole.BUSINESS_OWNER,
-              createdAt:   serverTimestamp(),
-            }
-            await setDoc(ref, newDoc)
-            setUserDoc({
-              id:          fbUser.uid,
-              ...newDoc,
-              createdAt:   Date.now(),
-            })
-          }
+          // Fetch current user's profile from MongoDB via BE.
+          // This is the single source of truth — no Firestore reads.
+          const me = await apiGet<UserMeResponse>('/auth/me')
+          setUserDoc(toUserDoc(fbUser.uid, me))
         } catch (err) {
-          // Surface Firestore errors to the user instead of silently getting stuck
-          console.error('useAuth: Firestore error', err)
-          const msg = err instanceof Error ? err.message : String(err)
-          // Check for permission-denied which means security rules need updating
-          if (msg.includes('permission-denied') || msg.includes('Missing or insufficient')) {
-            setError('Database permission error. Please check your Firestore security rules.')
+          if (err instanceof ApiError && err.status === 404) {
+            // No MongoDB doc yet — this happens when:
+            //   a) Brand-new Google sign-in hitting the portal for the first time
+            //   b) Account created via old flow before Phase 2 migration
+            // Auto-register with role = business_owner (business portal default).
+            try {
+              const registered = await apiPost<UserMeResponse>('/auth/register', {
+                displayName: fbUser.displayName ?? fbUser.email?.split('@')[0] ?? 'User',
+                role:        UserRole.BUSINESS_OWNER,
+              })
+              setUserDoc(toUserDoc(fbUser.uid, registered))
+            } catch (regErr) {
+              console.error('useAuth: auto-register failed', regErr)
+              setError('Failed to create your account. Please try again.')
+              setUserDoc(null)
+            }
           } else {
+            console.error('useAuth: /auth/me failed', err)
             setError('Failed to load your account. Please try again.')
+            setUserDoc(null)
           }
-          setUserDoc(null)
         }
       } else {
         setUserDoc(null)
@@ -142,6 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setLoading(false)
     })
+
     return unsubscribe
   }, [])
 
@@ -151,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
     try {
       await signInWithPopup(auth, googleProvider)
-      // onAuthStateChanged handles the rest
+      // onAuthStateChanged handles fetching the user doc from BE
     } catch (err) {
       const msg = toReadableError(err)
       if (msg) setError(msg)
@@ -160,48 +174,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /**
    * Email sign-in. Throws a readable string on failure so LoginPage can
-   * display it wherever it wants (below the form, not above the Google button).
+   * display it wherever it wants.
    */
   const signInWithEmail = async (email: string, password: string) => {
     try {
       await signInWithEmailAndPassword(auth, email, password)
-      // onAuthStateChanged handles redirect
+      // onAuthStateChanged handles fetching the user doc from BE
     } catch (err) {
       throw new Error(toReadableError(err) || 'Sign-in failed.')
     }
   }
 
   /**
-   * Creates a Firebase Auth user + Firestore doc with role = business_owner.
+   * Creates a Firebase Auth user then registers the user in MongoDB via the BE.
    *
    * Race-condition fix: `createUserWithEmailAndPassword` signs the user in
-   * immediately, firing `onAuthStateChanged` BEFORE `setDoc` has run.
-   * That first listener call finds no Firestore doc → userDoc stays null →
-   * redirect never fires. We fix this by manually setting userDoc right after
-   * `setDoc` so the redirect useEffect in LoginPage can react.
+   * immediately, firing `onAuthStateChanged` before `apiPost('/auth/register')`
+   * has run. That first listener call hits `GET /auth/me` → 404 → auto-registers
+   * as a race. We sidestep this by calling register ourselves and manually
+   * setting userDoc so the redirect in LoginPage fires without waiting for the
+   * second onAuthStateChanged cycle.
    *
-   * Throws a readable string on failure so LoginPage can display it below the
-   * form rather than above the Google button.
+   * The register endpoint is idempotent, so a concurrent call from the
+   * onAuthStateChanged fallback is harmless.
    */
   const signUpWithEmail = async (email: string, password: string, displayName: string) => {
     try {
       const { user } = await createUserWithEmailAndPassword(auth, email, password)
       await updateProfile(user, { displayName })
-      const userData = {
-        email:       user.email ?? email,
+
+      const response = await apiPost<UserMeResponse>('/auth/register', {
         displayName,
-        role:        UserRole.BUSINESS_OWNER,
-        createdAt:   serverTimestamp(),
-      }
-      await setDoc(doc(db, 'users', user.uid), userData)
-      // Manually set userDoc — don't wait for a second onAuthStateChanged cycle
-      setUserDoc({
-        id:          user.uid,
-        email:       user.email ?? email,
-        displayName,
-        role:        UserRole.BUSINESS_OWNER,
-        createdAt:   Date.now(),
+        role: UserRole.BUSINESS_OWNER,
       })
+      // Manually set userDoc — don't wait for a second onAuthStateChanged cycle
+      setUserDoc(toUserDoc(user.uid, response))
     } catch (err) {
       throw new Error(toReadableError(err) || 'Sign-up failed.')
     }

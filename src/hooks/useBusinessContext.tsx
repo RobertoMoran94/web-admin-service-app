@@ -13,7 +13,7 @@ import {
 import { db } from '../lib/firebase'
 import { useAuth } from './useAuth'
 import { UserRole, type Business, type BusinessHours } from '../types'
-import { apiGet, ApiError } from '../api/client'
+import { apiGet } from '../api/client'
 import { defaultHours } from '../types'
 
 // ── BE response types ─────────────────────────────────────────────────────────
@@ -139,16 +139,11 @@ export function BusinessProvider({ children }: { children: ReactNode }) {
         .finally(() => setLoading(false))
     } else if (userDoc.role === UserRole.BUSINESS_OWNER) {
       // Business owner: fetch own business from MongoDB via BE.
-      // 404 means no business created yet — that's a valid state (not an error).
+      // Every business owner has a business from registration — 404 should not occur
+      // in normal operation, so all errors are surfaced the same way.
       apiGet<BeBusinessProfile>(`/business/profile/${firebaseUser.uid}`)
         .then((profile) => setBusiness(beProfileToBusiness(profile)))
-        .catch((err) => {
-          if (err instanceof ApiError && err.status === 404) {
-            setBusiness(null)   // no business yet — profile page will offer creation
-          } else {
-            setError(err instanceof Error ? err.message : 'Failed to load business.')
-          }
-        })
+        .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load business.'))
         .finally(() => setLoading(false))
     } else {
       setLoading(false)
